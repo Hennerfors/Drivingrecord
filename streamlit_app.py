@@ -130,7 +130,7 @@ if excel_upload_fil is not None:
         df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
         
         st.success(f"{len(uppladdad_df)} resor importerades!")
-        st.rerun()
+        # Removed st.rerun() to let the page continue naturally
     except Exception as e:
         st.error(f"Fel vid import: {e}")
 
