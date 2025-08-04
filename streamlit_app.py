@@ -62,6 +62,50 @@ with st.form("add_journey"):
         st.success("Resa sparad!")
         st.rerun()  # Refresh the app to show new data
 
+# ➕ Formulär för att lägga till flera resor
+st.subheader("📅 Lägg till flera resor")
+
+# Välj flera datum
+datum_lista = st.multiselect("Välj datum", options=[d.date() for d in pd.date_range(date(2024, 1, 1), date.today())])
+
+# Gemensamma uppgifter
+starttid_multi = st.time_input("Starttid", key="multi_starttid")
+sluttid_multi = st.time_input("Sluttid", key="multi_sluttid")
+startplats_multi = st.text_input("Startplats", key="multi_startplats")
+slutplats_multi = st.text_input("Slutplats", key="multi_slutplats")
+stracka_multi = st.number_input("Sträcka (km)", min_value=0.0, step=0.1, key="multi_stracka")
+syfte_multi = st.text_input("Syfte", key="multi_syfte")
+
+if st.button("Lägg till resor", key="add_multiple_journeys"):
+    if datum_lista and startplats_multi and slutplats_multi and stracka_multi > 0:
+        nya_resor = []
+        for d in datum_lista:
+            restid = (datetime.strptime(sluttid_multi.strftime("%H:%M"), "%H:%M") -
+                      datetime.strptime(starttid_multi.strftime("%H:%M"), "%H:%M")).seconds / 60
+
+            resa = {
+                "Datum": d,  # d is already a date object now
+                "Startid": starttid_multi.strftime("%H:%M"),
+                "Sluttid": sluttid_multi.strftime("%H:%M"),
+                "Restid (min)": int(restid),
+                "Startplats": startplats_multi,
+                "Slutplats": slutplats_multi,
+                "Sträcka (km)": stracka_multi,
+                "Syfte": syfte_multi
+            }
+            nya_resor.append(resa)
+
+        # Add to session state
+        st.session_state.journey_log.extend(nya_resor)
+        
+        # Save to Excel
+        df_to_save = pd.DataFrame(st.session_state.journey_log)
+        df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
+        st.success(f"{len(nya_resor)} resor har lagts till!")
+        st.rerun()
+    else:
+        st.error("Vänligen fyll i alla fält och välj minst ett datum.")
+
 # 📋 Körjournal DataFrame
 if st.session_state.journey_log:
     df = pd.DataFrame(st.session_state.journey_log)
@@ -89,7 +133,7 @@ if st.session_state.journey_log:
         st.metric("Snittsträcka per resa", f"{filtered_df['Sträcka (km)'].mean():.1f} km")
 
         # Resor per månad
-        filtered_df["Månad"] = pd.to_datetime(filtered_df["Datum"]).dt.to_period("M")
+        filtered_df["Månad"] = pd.to_datetime(filtered_df["Datum"]).dt.strftime("%Y-%m (%B)")
         månad_stat = filtered_df.groupby("Månad").size()
         st.bar_chart(månad_stat)
 
@@ -168,6 +212,20 @@ if len(filtered_df) > 0:
                     st.rerun()
 
 
+# 📥 Ladda ner Excel
+if st.session_state.journey_log and len(filtered_df) > 0:
+    excel_buffer = pd.ExcelWriter("temp.xlsx", engine="openpyxl")
+    filtered_df.to_excel(excel_buffer, index=False)
+    excel_buffer.close()
+    
+    with open("temp.xlsx", "rb") as file:
+        st.download_button(
+            "Ladda ner Excel", 
+            data=file.read(), 
+            file_name="korjournal.xlsx", 
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_button"
+        )
 
 # Edit journey form
 if st.session_state.get('editing_journey', False):
@@ -269,28 +327,6 @@ if st.session_state.get('editing_journey', False):
                 del st.session_state['edit_index']
             st.rerun()
 
-# 📥 Ladda ner Excel (moved outside of edit form)
-if st.session_state.journey_log and len(filtered_df) > 0:
-    st.subheader("📥 Ladda ner data")
-    
-    # Create Excel file in memory
-    from io import BytesIO
-    excel_buffer = BytesIO()
-    
-    with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
-        filtered_df.to_excel(writer, index=False, sheet_name="Körjournal")
-    
-    excel_buffer.seek(0)
-    
-    st.download_button(
-        "📥 Ladda ner Excel", 
-        data=excel_buffer.getvalue(), 
-        file_name="korjournal.xlsx", 
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        key="download_button"
-    )
 
-elif st.session_state.journey_log:
-    st.info("Inga resor att visa med de valda filtren.")
 else:
     st.info("Ingen resa har loggats ännu.")
