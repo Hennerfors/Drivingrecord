@@ -145,9 +145,28 @@ if st.session_state.journey_log:
     start_filter = st.sidebar.date_input("Från datum", value=pd.to_datetime(df["Datum"]).min().date(), key="filter_start_date")
     end_filter = st.sidebar.date_input("Till datum", value=pd.to_datetime(df["Datum"]).max().date(), key="filter_end_date")
     syfte_filter = st.sidebar.text_input("Syfte (valfri)", key="filter_syfte")
+    
+    # 🗑️ Ta bort alla resor
+    st.sidebar.header("⚠️ Farliga åtgärder")
+    if st.sidebar.button("🗑️ Ta bort ALLA resor", type="secondary"):
+        if st.sidebar.checkbox("Jag är säker på att jag vill ta bort ALLA resor", key="confirm_delete_all"):
+            # Clear all journeys
+            st.session_state.journey_log = []
+            
+            # Create empty Excel file
+            empty_df = pd.DataFrame(columns=["Datum", "Startplats", "Slutplats", "Sträcka (km)", "Syfte"])
+            empty_df.to_excel(excel_fil, index=False, engine="openpyxl")
+            
+            st.sidebar.success("Alla resor har tagits bort!")
+            st.rerun()
+        else:
+            st.sidebar.warning("Markera bekräftelserutan för att ta bort alla resor")
 
     # Convert dates for comparison
     df["Datum"] = pd.to_datetime(df["Datum"]).dt.date
+    
+    st.write(f"Debug: Datumintervall i data: {df['Datum'].min()} till {df['Datum'].max()}")
+    st.write(f"Debug: Filterintervall: {start_filter} till {end_filter}")
     
     filtered_df = df[
         (df["Datum"] >= start_filter) &
@@ -155,6 +174,8 @@ if st.session_state.journey_log:
     ]
     if syfte_filter:
         filtered_df = filtered_df[filtered_df["Syfte"].str.contains(syfte_filter, case=False, na=False)]
+    
+    st.write(f"Debug: Antal resor efter filtrering: {len(filtered_df)}")
 
     st.subheader("📊 Statistik")
     st.metric("Total sträcka", f"{filtered_df['Sträcka (km)'].sum():.1f} km")
