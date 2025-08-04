@@ -106,7 +106,28 @@ if st.button("Lägg till resor", key="add_multiple_journeys"):
     else:
         st.error("Vänligen fyll i alla fält och välj minst ett datum.")
 
-# 📋 Körjournal DataFrame
+# � Ladda upp körjournal från Excel
+st.subheader("📤 Ladda upp körjournal från Excel")
+
+excel_upload_fil = st.file_uploader("Välj en Excel-fil (.xlsx)", type=["xlsx"])
+if excel_upload_fil is not None:
+    try:
+        uppladdad_df = pd.read_excel(excel_upload_fil, engine="openpyxl", parse_dates=["Datum"])
+        
+        # Add uploaded data to session state
+        uploaded_records = uppladdad_df.to_dict(orient="records")
+        st.session_state.journey_log.extend(uploaded_records)
+        
+        # Save combined data to Excel
+        df_to_save = pd.DataFrame(st.session_state.journey_log)
+        df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
+        
+        st.success(f"{len(uppladdad_df)} resor importerades!")
+        st.rerun()
+    except Exception as e:
+        st.error(f"Fel vid import: {e}")
+
+
 if st.session_state.journey_log:
     df = pd.DataFrame(st.session_state.journey_log)
 
