@@ -127,7 +127,7 @@ if excel_upload_fil is not None:
     except Exception as e:
         st.error(f"Fel vid import: {e}")
 
-
+# 📋 Körjournal DataFrame
 if st.session_state.journey_log:
     df = pd.DataFrame(st.session_state.journey_log)
 
@@ -158,11 +158,10 @@ if st.session_state.journey_log:
         månad_stat = filtered_df.groupby("Månad").size()
         st.bar_chart(månad_stat)
 
-st.subheader("📜 Filtrerade resor")
+    st.subheader("📜 Filtrerade resor")
 
-
-# Add delete functionality
-if len(filtered_df) > 0:
+    # Add delete functionality
+    if len(filtered_df) > 0:
         # Display the dataframe
         st.dataframe(filtered_df)
         
@@ -232,21 +231,23 @@ if len(filtered_df) > 0:
                     st.success("Resa borttagen!")
                     st.rerun()
 
-
-# 📥 Ladda ner Excel
-if st.session_state.journey_log and len(filtered_df) > 0:
-    excel_buffer = pd.ExcelWriter("temp.xlsx", engine="openpyxl")
-    filtered_df.to_excel(excel_buffer, index=False)
-    excel_buffer.close()
-    
-    with open("temp.xlsx", "rb") as file:
-        st.download_button(
-            "Ladda ner Excel", 
-            data=file.read(), 
-            file_name="korjournal.xlsx", 
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="download_button"
-        )
+    # 📥 Ladda ner Excel
+    if len(filtered_df) > 0:
+        excel_buffer = pd.ExcelWriter("temp.xlsx", engine="openpyxl")
+        filtered_df.to_excel(excel_buffer, index=False)
+        excel_buffer.close()
+        
+        with open("temp.xlsx", "rb") as file:
+            st.download_button(
+                "Ladda ner Excel", 
+                data=file.read(), 
+                file_name="korjournal.xlsx", 
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="download_button"
+            )
+else:
+    filtered_df = pd.DataFrame()  # Empty dataframe when no journeys
+    st.info("Ingen resa har loggats ännu.")
 
 # Edit journey form
 if st.session_state.get('editing_journey', False):
@@ -350,4 +351,5 @@ if st.session_state.get('editing_journey', False):
 
 
 else:
+    filtered_df = pd.DataFrame()  # Empty dataframe when no journeys
     st.info("Ingen resa har loggats ännu.")
