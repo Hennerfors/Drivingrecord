@@ -114,9 +114,16 @@ if excel_upload_fil is not None:
     try:
         uppladdad_df = pd.read_excel(excel_upload_fil, engine="openpyxl", parse_dates=["Datum"])
         
+        # Debug information
+        st.write(f"Läser {len(uppladdad_df)} resor från uppladdad fil")
+        st.write(f"Befintliga resor innan import: {len(st.session_state.journey_log)}")
+        
         # Add uploaded data to session state
         uploaded_records = uppladdad_df.to_dict(orient="records")
         st.session_state.journey_log.extend(uploaded_records)
+        
+        # Debug information
+        st.write(f"Totalt antal resor efter import: {len(st.session_state.journey_log)}")
         
         # Save combined data to Excel
         df_to_save = pd.DataFrame(st.session_state.journey_log)
@@ -129,7 +136,9 @@ if excel_upload_fil is not None:
 
 # 📋 Körjournal DataFrame
 if st.session_state.journey_log:
+    st.write(f"Debug: Session state innehåller {len(st.session_state.journey_log)} resor")
     df = pd.DataFrame(st.session_state.journey_log)
+    st.write(f"Debug: DataFrame skapad med {len(df)} rader")
 
     # 🔍 Filter
     st.sidebar.header("Filtrera resor")
@@ -348,7 +357,6 @@ if st.session_state.get('editing_journey', False):
             if 'edit_index' in st.session_state:
                 del st.session_state['edit_index']
             st.rerun()
-
 
 else:
     filtered_df = pd.DataFrame()  # Empty dataframe when no journeys
