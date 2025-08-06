@@ -4,44 +4,102 @@ import pydeck as pdk
 from datetime import date
 from datetime import datetime
 
-# Define the Excel file path
+# Konfigurera sidlayout
+st.set_page_config(page_title="Körjournal", page_icon="🚗", layout="wide")
+
 excel_fil = "korjournal.xlsx"
 
-# Function to load data (moved to top)
+# Funktion för att ladda data från Excel
 def ladda_data():
     try:
-        return pd.read_excel(excel_fil, engine="openpyxl", parse_dates=["Datum"])
+        df = pd.read_excel(excel_fil, engine="openpyxl", parse_dates=["Datum"])
+        return df.to_dict(orient="records")
     except FileNotFoundError:
-        return pd.DataFrame(columns=["Datum", "Startplats", "Slutplats", "Sträcka (km)", "Syfte"])
+        st.info("Ingen körjournal hittades. Skapar ny.")
+        return []
+    except Exception as e:
+        st.error(f"Fel vid inladdning av data: {e}")
+        return []
 
-# Load existing data and initialize session state
-df = ladda_data()
-if 'journey_log' not in st.session_state:
-    if not df.empty:
-        st.session_state.journey_log = df.to_dict(orient="records")
-        st.write(f"🔄 Laddade {len(st.session_state.journey_log)} resor från Excel vid uppstart")
-    else:
-        st.session_state.journey_log = []
-        st.write("🆕 Startar med tom körjournal")
-else:
-    # Verify session state matches Excel file
-    current_excel_count = len(df) if not df.empty else 0
-    session_count = len(st.session_state.journey_log)
-    if current_excel_count != session_count:
-        st.warning(f"⚠️ Synkroniseringsproblem upptäckt: Excel har {current_excel_count} resor, session state har {session_count} resor")
-        if st.button("🔄 Synkronisera från Excel", key="sync_from_excel"):
-            if not df.empty:
-                st.session_state.journey_log = df.to_dict(orient="records")
-                st.success(f"✅ Synkroniserat! Laddade {len(st.session_state.journey_log)} resor från Excel")
-                st.rerun()
-            else:
-                st.session_state.journey_log = []
-                st.success("✅ Synkroniserat! Tom körjournal")
+# Ladda befintlig data eller skapa ny
+if "journey_log" not in st.session_state:
+    st.session_state.journey_log = ladda_data()
 
-st.title("📘 Avancerad Körjournal")
+st.title("🚗 Körjournal")
+st.markdown("---")
 
-# ➕ Formulär för att lägga till ny resa
-with st.form("add_journey"):
+# 🏢 Snabbregistrera arbetsdagens resor
+st.subheader("🏢 Snabbregistrera arbetsdagens resor")
+
+# Förinställda tider och platser
+favoritresor = {
+    "Till jobbet": {
+        "Startplats": "Bruksgatan 4D, 78474 Borlänge",
+        "Slutplats": "Kajvägen 13 Parking, Ludvika",
+        "Starttid": "00:30",
+        "Sluttid": "01:07",
+        "Sträcka (km)": 45.7,
+        "Syfte": "Resa till jobbet"
+    },
+    "Från jobbet": {
+        "Startplats": "Kajvägen 13 Parking, Ludvika",
+        "Slutplats": "Bruksgatan 4D, 78474 Borlänge",
+        "Starttid": "22:10",
+        "Sluttid": "22:47",
+        "Sträcka (km)": 45.7,
+        "Syfte": "Resa hem från jobbet"
+    }
+}
+
+work_datum = st.date_input("Datum för arbetsdagen", value=date.today(), key="work_date")
+
+if st.button("Registrera arbetsdagens resor", key="add_work_journeys"):
+    nya_resor = []
+    for namn, resa in favoritresor.items():
+        restid = (datetime.strptime(resa["Sluttid"], "%H:%M") -
+                  datetime.strptime(resa["Starttid"], "%H:%M")).seconds / 60
+
+        ny_resa = {
+            "Datum": work_datum,
+            "Startid": resa["Starttid"],
+            "Sluttid": resa["Sluttid"],
+            "Restid (min)": int(restid),
+            "Startplats": resa["Startplats"],
+            "Slutplats": resa["Slutplats"],
+            "Sträcka (km)": resa["Sträcka (km)"],
+            "Syfte": resa["Syfte"]
+        }
+        nya_resor.append(ny_resa)
+
+    # Add to session state
+    st.session_state.journey_log.extend(nya_resor)
+    
+    # Save to Excel
+    df_to_save = pd.DataFrame(st.session_state.journey_log)
+    df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
+    st.success("Resorna till och från jobbet har registrerats!")
+    st.rerun()
+
+st.markdown("---")
+
+# Sidopanel för debug och diagnostik
+st.sidebar.title("📊 Diagnostik")
+st.sidebar.info(f"Session State Resor: {len(st.session_state.journey_log)}")
+
+# Försök att läsa Excel för jämförelse
+try:
+    debug_df = pd.read_excel(excel_fil, engine="openpyxl")
+    st.sidebar.info(f"Excel Fil Resor: {len(debug_df)}")
+except:
+    st.sidebar.warning("Kan inte läsa Excel fil")
+
+if st.sidebar.button("Synkronisera från Excel"):
+    st.session_state.journey_log = ladda_data()
+    st.sidebar.success("Data uppdaterad från Excel!")
+    st.rerun()
+
+# Formulär för att lägga till ny resa
+with st.form("add_journey_form"):
     st.subheader("Lägg till ny resa")
     datum = st.date_input("Datum", value=date.today(), key="add_datum")
     starttid = st.time_input("Starttid", key="add_starttid")
@@ -122,276 +180,215 @@ if st.button("Lägg till resor", key="add_multiple_journeys"):
     else:
         st.error("Vänligen fyll i alla fält och välj minst ett datum.")
 
-# � Ladda upp körjournal från Excel
+# 📤 Ladda upp körjournal från Excel
 st.subheader("📤 Ladda upp körjournal från Excel")
 
-excel_upload_fil = st.file_uploader("Välj en Excel-fil (.xlsx)", type=["xlsx"])
-if excel_upload_fil is not None:
+uploaded_file = st.file_uploader("Välj Excel-fil (.xlsx)", type="xlsx")
+
+if uploaded_file is not None:
     try:
-        uppladdad_df = pd.read_excel(excel_upload_fil, engine="openpyxl", parse_dates=["Datum"])
+        df_upload = pd.read_excel(uploaded_file, engine="openpyxl", parse_dates=["Datum"])
         
-        # Debug information
-        st.write(f"Läser {len(uppladdad_df)} resor från uppladdad fil")
-        st.write(f"Befintliga resor innan import: {len(st.session_state.journey_log)}")
+        # Show preview of data
+        st.subheader("Förhandsgranskning av data:")
+        st.dataframe(df_upload.head())
         
-        # Add uploaded data to session state
-        uploaded_records = uppladdad_df.to_dict(orient="records")
-        st.session_state.journey_log.extend(uploaded_records)
-        
-        # Debug information
-        st.write(f"Totalt antal resor efter import: {len(st.session_state.journey_log)}")
-        
-        # Save combined data to Excel
-        df_to_save = pd.DataFrame(st.session_state.journey_log)
-        df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
-        
-        st.success(f"{len(uppladdad_df)} resor importerades!")
-        # Removed st.rerun() to let the page continue naturally
-    except Exception as e:
-        st.error(f"Fel vid import: {e}")
-
-# 📋 Körjournal DataFrame
-if st.session_state.journey_log:
-    st.write(f"Debug: Session state innehåller {len(st.session_state.journey_log)} resor")
-    df = pd.DataFrame(st.session_state.journey_log)
-    st.write(f"Debug: DataFrame skapad med {len(df)} rader")
-
-    # 🔍 Filter
-    st.sidebar.header("Filtrera resor")
-    start_filter = st.sidebar.date_input("Från datum", value=pd.to_datetime(df["Datum"]).min().date(), key="filter_start_date")
-    end_filter = st.sidebar.date_input("Till datum", value=pd.to_datetime(df["Datum"]).max().date(), key="filter_end_date")
-    syfte_filter = st.sidebar.text_input("Syfte (valfri)", key="filter_syfte")
-    
-    # 🗑️ Ta bort alla resor
-    st.sidebar.header("⚠️ Farliga åtgärder")
-    if st.sidebar.button("🗑️ Ta bort ALLA resor", type="secondary"):
-        if st.sidebar.checkbox("Jag är säker på att jag vill ta bort ALLA resor", key="confirm_delete_all"):
-            # Clear all journeys
-            st.session_state.journey_log = []
+        if st.button("Importera data", key="import_excel"):
+            # Convert to list of dicts and merge with existing data
+            imported_data = df_upload.to_dict(orient="records")
+            st.session_state.journey_log.extend(imported_data)
             
-            # Create empty Excel file
-            empty_df = pd.DataFrame(columns=["Datum", "Startplats", "Slutplats", "Sträcka (km)", "Syfte"])
-            empty_df.to_excel(excel_fil, index=False, engine="openpyxl")
+            # Save combined data to Excel
+            df_combined = pd.DataFrame(st.session_state.journey_log)
+            df_combined.to_excel(excel_fil, index=False, engine="openpyxl")
             
-            st.sidebar.success("Alla resor har tagits bort!")
+            st.success(f"Importerade {len(imported_data)} resor!")
             st.rerun()
-        else:
-            st.sidebar.warning("Markera bekräftelserutan för att ta bort alla resor")
-
-    # Convert dates for comparison
-    df["Datum"] = pd.to_datetime(df["Datum"]).dt.date
-    
-    st.write(f"Debug: Datumintervall i data: {df['Datum'].min()} till {df['Datum'].max()}")
-    st.write(f"Debug: Filterintervall: {start_filter} till {end_filter}")
-    
-    filtered_df = df[
-        (df["Datum"] >= start_filter) &
-        (df["Datum"] <= end_filter)
-    ]
-    if syfte_filter:
-        filtered_df = filtered_df[filtered_df["Syfte"].str.contains(syfte_filter, case=False, na=False)]
-    
-    st.write(f"Debug: Antal resor efter filtrering: {len(filtered_df)}")
-
-    st.subheader("📊 Statistik")
-    st.metric("Total sträcka", f"{filtered_df['Sträcka (km)'].sum():.1f} km")
-    st.metric("Antal resor", len(filtered_df))
-    if len(filtered_df) > 0:
-        st.metric("Snittsträcka per resa", f"{filtered_df['Sträcka (km)'].mean():.1f} km")
-
-        # Resor per månad
-        filtered_df["Månad"] = pd.to_datetime(filtered_df["Datum"]).dt.strftime("%Y-%m (%B)")
-        månad_stat = filtered_df.groupby("Månad").size()
-        st.bar_chart(månad_stat)
-
-    st.subheader("📜 Filtrerade resor")
-
-    # Add delete functionality
-    if len(filtered_df) > 0:
-        # Display the dataframe
-        st.dataframe(filtered_df)
-        
-        # Edit and Delete journey sections
-        col_edit, col_delete = st.columns(2)
-        
-        with col_edit:
-            st.subheader("✏️ Redigera resa")
-            edit_index = st.selectbox(
-                "Välj resa att redigera:",
-                options=range(len(filtered_df)),
-                format_func=lambda x: f"{filtered_df.iloc[x]['Datum']} - {filtered_df.iloc[x]['Startplats']} → {filtered_df.iloc[x]['Slutplats']}",
-                key="edit_selectbox"
-            )
             
-            if st.button("✏️ Redigera", type="primary", key="edit_button"):
-                st.session_state.editing_journey = True
-                st.session_state.edit_index = edit_index
-                st.session_state.journey_to_edit = filtered_df.iloc[edit_index].to_dict()
-                # Removed st.rerun() to prevent data loss
+    except Exception as e:
+        st.error(f"Fel vid inläsning av filen: {e}")
+
+# 📊 Visa och filtrera resor
+st.markdown("---")
+st.subheader("📊 Dina resor")
+
+if st.session_state.journey_log:
+    df = pd.DataFrame(st.session_state.journey_log)
+    
+    # Ensure Datum column is datetime
+    if not pd.api.types.is_datetime64_any_dtype(df["Datum"]):
+        df["Datum"] = pd.to_datetime(df["Datum"]).dt.date
+    else:
+        df["Datum"] = df["Datum"].dt.date
+    
+    # Filter sidebar
+    with st.sidebar:
+        st.header("Filter")
         
-        with col_delete:
-            st.subheader("🗑️ Ta bort resa")
-            delete_index = st.selectbox(
-                "Välj resa att ta bort:",
-                options=range(len(filtered_df)),
-                format_func=lambda x: f"{filtered_df.iloc[x]['Datum']} - {filtered_df.iloc[x]['Startplats']} → {filtered_df.iloc[x]['Slutplats']}",
-                key="delete_selectbox"
+        # Date range filter
+        min_date = df["Datum"].min()
+        max_date = df["Datum"].max()
+        
+        date_range = st.date_input(
+            "Välj datumintervall",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date
+        )
+        
+        # Purpose filter
+        unique_purposes = df["Syfte"].unique().tolist()
+        selected_purposes = st.multiselect(
+            "Filtrera på syfte",
+            options=unique_purposes,
+            default=unique_purposes
+        )
+    
+    # Apply filters
+    if len(date_range) == 2:
+        mask = (df["Datum"] >= date_range[0]) & (df["Datum"] <= date_range[1])
+        df_filtered = df[mask]
+    else:
+        df_filtered = df
+    
+    df_filtered = df_filtered[df_filtered["Syfte"].isin(selected_purposes)]
+    
+    # Debug info in sidebar
+    st.sidebar.info(f"Filtrerade resor: {len(df_filtered)}")
+    
+    # Ta bort alla resor längst ner på sidopanelen
+    if st.session_state.journey_log:
+        st.sidebar.markdown("---")
+        st.sidebar.warning("⚠️ Farlig zon")
+        
+        if st.sidebar.checkbox("Jag förstår att detta tar bort ALLA resor"):
+            if st.sidebar.button("🗑️ Ta bort alla resor"):
+                st.session_state.journey_log = []
+                # Also clear the Excel file
+                pd.DataFrame().to_excel(excel_fil, index=False, engine="openpyxl")
+                st.sidebar.success("Alla resor har tagits bort!")
+                st.rerun()
+    
+    # Display filtered data
+    st.dataframe(df_filtered)
+    
+    # 📥 Ladda ner Excel-fil
+    if st.button("Ladda ner som Excel"):
+        df_download = pd.DataFrame(st.session_state.journey_log)
+        df_download.to_excel("temp.xlsx", index=False, engine="openpyxl")
+        
+        with open("temp.xlsx", "rb") as file:
+            st.download_button(
+                label="💾 Ladda ner körjournal.xlsx",
+                data=file,
+                file_name="körjournal.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
+
+    # Statistics
+    st.subheader("📈 Statistik")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        total_distance = df_filtered["Sträcka (km)"].sum()
+        st.metric("Total sträcka", f"{total_distance:.1f} km")
+    
+    with col2:
+        total_journeys = len(df_filtered)
+        st.metric("Antal resor", total_journeys)
+    
+    with col3:
+        if total_journeys > 0:
+            avg_distance = total_distance / total_journeys
+            st.metric("Genomsnittlig sträcka", f"{avg_distance:.1f} km")
+    
+    # Monthly statistics
+    if not df_filtered.empty:
+        df_stats = df_filtered.copy()
+        df_stats["Månad"] = pd.to_datetime(df_stats["Datum"]).dt.to_period("M")
+        monthly_stats = df_stats.groupby("Månad").agg({
+            "Sträcka (km)": "sum",
+            "Datum": "count"
+        }).rename(columns={"Datum": "Antal resor"})
+        
+        # Convert period index to string with month names
+        monthly_stats.index = monthly_stats.index.to_timestamp().strftime("%Y %B")
+        
+        st.subheader("📊 Månadsstatistik")
+        st.bar_chart(monthly_stats["Sträcka (km)"])
+
+# 🗑️ Ta bort resor
+st.markdown("---")
+st.subheader("🗑️ Hantera resor")
+
+# Redigera specifik resa
+if st.session_state.journey_log:
+    st.subheader("✏️ Redigera resa")
+    
+    # Create a selectbox with journey info
+    journey_options = []
+    for i, journey in enumerate(st.session_state.journey_log):
+        date_str = journey["Datum"].strftime("%Y-%m-%d") if hasattr(journey["Datum"], "strftime") else str(journey["Datum"])
+        journey_str = f"{i}: {date_str} - {journey['Startplats']} → {journey['Slutplats']}"
+        journey_options.append(journey_str)
+    
+    selected_journey_idx = st.selectbox("Välj resa att redigera", range(len(journey_options)), 
+                                       format_func=lambda x: journey_options[x])
+    
+    if selected_journey_idx is not None:
+        selected_journey = st.session_state.journey_log[selected_journey_idx]
+        
+        with st.form("edit_journey_form"):
+            st.write(f"Redigerar resa {selected_journey_idx}")
             
-            if st.button("🗑️ Ta bort", type="secondary", key="delete_button"):
-                if len(filtered_df) > 0:
-                    # Find the original index in the full journey log
-                    journey_to_delete = filtered_df.iloc[delete_index]
+            # Pre-fill form with existing data
+            edit_datum = st.date_input("Datum", value=selected_journey["Datum"] if hasattr(selected_journey["Datum"], "date") else selected_journey["Datum"])
+            edit_starttid = st.time_input("Starttid", value=datetime.strptime(selected_journey["Startid"], "%H:%M").time())
+            edit_sluttid = st.time_input("Sluttid", value=datetime.strptime(selected_journey["Sluttid"], "%H:%M").time())
+            edit_startplats = st.text_input("Startplats", value=selected_journey["Startplats"])
+            edit_slutplats = st.text_input("Slutplats", value=selected_journey["Slutplats"])
+            edit_stracka = st.number_input("Sträcka (km)", value=selected_journey["Sträcka (km)"], min_value=0.0, step=0.1)
+            edit_syfte = st.text_input("Syfte", value=selected_journey["Syfte"])
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.form_submit_button("💾 Spara ändringar"):
+                    # Calculate new travel time
+                    restid = (datetime.combine(date.today(), edit_sluttid) - 
+                             datetime.combine(date.today(), edit_starttid)).seconds / 60
                     
-                    # Find and remove from session state with more flexible matching
-                    for i, journey in enumerate(st.session_state.journey_log):
-                        # Convert both dates to comparable format
-                        journey_date = journey['Datum']
-                        if isinstance(journey_date, str):
-                            journey_date = pd.to_datetime(journey_date).date()
-                        elif hasattr(journey_date, 'date'):
-                            journey_date = journey_date.date()
-                        
-                        delete_date = journey_to_delete['Datum']
-                        if hasattr(delete_date, 'delete'):
-                            delete_date = delete_date.date()
-                        
-                        # More flexible matching - only check core fields that should exist
-                        if (journey_date == delete_date and 
-                            journey['Startplats'] == journey_to_delete['Startplats'] and
-                            journey['Slutplats'] == journey_to_delete['Slutplats'] and
-                            journey['Sträcka (km)'] == journey_to_delete['Sträcka (km)'] and
-                            journey['Syfte'] == journey_to_delete['Syfte']):
-                            del st.session_state.journey_log[i]
-                            break
+                    # Update the journey
+                    st.session_state.journey_log[selected_journey_idx] = {
+                        "Datum": edit_datum,
+                        "Startid": edit_starttid.strftime("%H:%M"),
+                        "Sluttid": edit_sluttid.strftime("%H:%M"),
+                        "Restid (min)": int(restid),
+                        "Startplats": edit_startplats,
+                        "Slutplats": edit_slutplats,
+                        "Sträcka (km)": edit_stracka,
+                        "Syfte": edit_syfte
+                    }
                     
-                    # Save updated data to Excel
-                    if st.session_state.journey_log:
-                        df_to_save = pd.DataFrame(st.session_state.journey_log)
-                        df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
-                    else:
-                        # If no journeys left, create empty file
-                        empty_df = pd.DataFrame(columns=["Datum", "Startplats", "Slutplats", "Sträcka (km)", "Syfte"])
-                        empty_df.to_excel(excel_fil, index=False, engine="openpyxl")
+                    # Save to Excel
+                    df_to_save = pd.DataFrame(st.session_state.journey_log)
+                    df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
+                    
+                    st.success("Resa uppdaterad!")
+                    st.rerun()
+            
+            with col2:
+                if st.form_submit_button("🗑️ Ta bort resa"):
+                    # Remove the journey
+                    del st.session_state.journey_log[selected_journey_idx]
+                    
+                    # Save to Excel
+                    df_to_save = pd.DataFrame(st.session_state.journey_log)
+                    df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
                     
                     st.success("Resa borttagen!")
                     st.rerun()
 
-    # 📥 Ladda ner Excel
-    if len(filtered_df) > 0:
-        excel_buffer = pd.ExcelWriter("temp.xlsx", engine="openpyxl")
-        filtered_df.to_excel(excel_buffer, index=False)
-        excel_buffer.close()
-        
-        with open("temp.xlsx", "rb") as file:
-            st.download_button(
-                "Ladda ner Excel", 
-                data=file.read(), 
-                file_name="korjournal.xlsx", 
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                key="download_button"
-            )
-
-    # Edit journey form - moved inside the main if block
-    if st.session_state.get('editing_journey', False):
-        st.subheader("✏️ Redigera vald resa")
-        journey_to_edit = st.session_state.journey_to_edit
-        
-        with st.form("edit_journey"):
-            # Pre-populate form with existing data
-            edit_datum = st.date_input("Datum", value=pd.to_datetime(journey_to_edit['Datum']).date(), key="edit_datum")
-            
-            # Handle time fields if they exist
-            if 'Startid' in journey_to_edit and journey_to_edit['Startid']:
-                try:
-                    start_time = datetime.strptime(str(journey_to_edit['Startid']), "%H:%M").time()
-                except:
-                    start_time = datetime.strptime("08:00", "%H:%M").time()
-            else:
-                start_time = datetime.strptime("08:00", "%H:%M").time()
-                
-            if 'Sluttid' in journey_to_edit and journey_to_edit['Sluttid']:
-                try:
-                    end_time = datetime.strptime(str(journey_to_edit['Sluttid']), "%H:%M").time()
-                except:
-                    end_time = datetime.strptime("09:00", "%H:%M").time()
-            else:
-                end_time = datetime.strptime("09:00", "%H:%M").time()
-            
-            edit_starttid = st.time_input("Starttid", value=start_time, key="edit_starttid")
-            edit_sluttid = st.time_input("Sluttid", value=end_time, key="edit_sluttid")
-            edit_startplats = st.text_input("Startplats", value=journey_to_edit['Startplats'], key="edit_startplats")
-            edit_slutplats = st.text_input("Slutplats", value=journey_to_edit['Slutplats'], key="edit_slutplats")
-            edit_stracka = st.number_input("Sträcka (km)", value=float(journey_to_edit['Sträcka (km)']), min_value=0.0, step=0.1, key="edit_stracka")
-            edit_syfte = st.text_input("Syfte", value=journey_to_edit['Syfte'], key="edit_syfte")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                update_submitted = st.form_submit_button("💾 Uppdatera", type="primary")
-            with col2:
-                cancel_edit = st.form_submit_button("❌ Avbryt")
-            
-            if update_submitted and edit_startplats and edit_slutplats and edit_stracka > 0:
-                # Calculate travel time
-                tid_format = "%H:%M"
-                restid = (datetime.strptime(edit_sluttid.strftime(tid_format), tid_format) -
-                          datetime.strptime(edit_starttid.strftime(tid_format), tid_format)).seconds / 60  # minuter
-                
-                updated_journey = {
-                    "Datum": edit_datum,
-                    "Startid": edit_starttid.strftime("%H:%M"),
-                    "Sluttid": edit_sluttid.strftime("%H:%M"),
-                    "Restid (min)": int(restid),
-                    "Startplats": edit_startplats,
-                    "Slutplats": edit_slutplats,
-                    "Sträcka (km)": edit_stracka,
-                    "Syfte": edit_syfte
-                }
-                
-                # Find and update the journey in session state
-                original_journey = journey_to_edit
-                for i, journey in enumerate(st.session_state.journey_log):
-                    # Convert dates for comparison
-                    journey_date = journey['Datum']
-                    if isinstance(journey_date, str):
-                        journey_date = pd.to_datetime(journey_date).date()
-                    elif hasattr(journey_date, 'date'):
-                        journey_date = journey_date.date()
-                    
-                    original_date = pd.to_datetime(original_journey['Datum']).date()
-                    
-                    # Match the journey to update
-                    if (journey_date == original_date and 
-                        journey['Startplats'] == original_journey['Startplats'] and
-                        journey['Slutplats'] == original_journey['Slutplats'] and
-                        journey['Sträcka (km)'] == original_journey['Sträcka (km)'] and
-                        journey['Syfte'] == original_journey['Syfte']):
-                        st.session_state.journey_log[i] = updated_journey
-                        break
-                
-                # Save to Excel
-                df_to_save = pd.DataFrame(st.session_state.journey_log)
-                df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
-                
-                # Clear edit state
-                st.session_state.editing_journey = False
-                if 'journey_to_edit' in st.session_state:
-                    del st.session_state['journey_to_edit']
-                if 'edit_index' in st.session_state:
-                    del st.session_state['edit_index']
-                
-                st.success("Resa uppdaterad!")
-                st.rerun()
-            
-            if cancel_edit:
-                # Clear edit state
-                st.session_state.editing_journey = False
-                if 'journey_to_edit' in st.session_state:
-                    del st.session_state['journey_to_edit']
-                if 'edit_index' in st.session_state:
-                    del st.session_state['edit_index']
-                st.rerun()
-
 else:
-    filtered_df = pd.DataFrame()  # Empty dataframe when no journeys
     st.info("Ingen resa har loggats ännu.")
