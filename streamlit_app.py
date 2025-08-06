@@ -19,8 +19,24 @@ df = ladda_data()
 if 'journey_log' not in st.session_state:
     if not df.empty:
         st.session_state.journey_log = df.to_dict(orient="records")
+        st.write(f"🔄 Laddade {len(st.session_state.journey_log)} resor från Excel vid uppstart")
     else:
         st.session_state.journey_log = []
+        st.write("🆕 Startar med tom körjournal")
+else:
+    # Verify session state matches Excel file
+    current_excel_count = len(df) if not df.empty else 0
+    session_count = len(st.session_state.journey_log)
+    if current_excel_count != session_count:
+        st.warning(f"⚠️ Synkroniseringsproblem upptäckt: Excel har {current_excel_count} resor, session state har {session_count} resor")
+        if st.button("🔄 Synkronisera från Excel", key="sync_from_excel"):
+            if not df.empty:
+                st.session_state.journey_log = df.to_dict(orient="records")
+                st.success(f"✅ Synkroniserat! Laddade {len(st.session_state.journey_log)} resor från Excel")
+                st.rerun()
+            else:
+                st.session_state.journey_log = []
+                st.success("✅ Synkroniserat! Tom körjournal")
 
 st.title("📘 Avancerad Körjournal")
 
@@ -375,108 +391,6 @@ if st.session_state.journey_log:
                 if 'edit_index' in st.session_state:
                     del st.session_state['edit_index']
                 st.rerun()
-
-else:
-    filtered_df = pd.DataFrame()  # Empty dataframe when no journeys
-    st.info("Ingen resa har loggats ännu.")# Edit journey form
-if st.session_state.get('editing_journey', False):
-    st.subheader("✏️ Redigera vald resa")
-    journey_to_edit = st.session_state.journey_to_edit
-    
-    with st.form("edit_journey"):
-        # Pre-populate form with existing data
-        edit_datum = st.date_input("Datum", value=pd.to_datetime(journey_to_edit['Datum']).date(), key="edit_datum")
-        
-        # Handle time fields if they exist
-        if 'Startid' in journey_to_edit and journey_to_edit['Startid']:
-            try:
-                start_time = datetime.strptime(str(journey_to_edit['Startid']), "%H:%M").time()
-            except:
-                start_time = datetime.strptime("08:00", "%H:%M").time()
-        else:
-            start_time = datetime.strptime("08:00", "%H:%M").time()
-            
-        if 'Sluttid' in journey_to_edit and journey_to_edit['Sluttid']:
-            try:
-                end_time = datetime.strptime(str(journey_to_edit['Sluttid']), "%H:%M").time()
-            except:
-                end_time = datetime.strptime("09:00", "%H:%M").time()
-        else:
-            end_time = datetime.strptime("09:00", "%H:%M").time()
-        
-        edit_starttid = st.time_input("Starttid", value=start_time, key="edit_starttid")
-        edit_sluttid = st.time_input("Sluttid", value=end_time, key="edit_sluttid")
-        edit_startplats = st.text_input("Startplats", value=journey_to_edit['Startplats'], key="edit_startplats")
-        edit_slutplats = st.text_input("Slutplats", value=journey_to_edit['Slutplats'], key="edit_slutplats")
-        edit_stracka = st.number_input("Sträcka (km)", value=float(journey_to_edit['Sträcka (km)']), min_value=0.0, step=0.1, key="edit_stracka")
-        edit_syfte = st.text_input("Syfte", value=journey_to_edit['Syfte'], key="edit_syfte")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            update_submitted = st.form_submit_button("💾 Uppdatera", type="primary")
-        with col2:
-            cancel_edit = st.form_submit_button("❌ Avbryt")
-        
-        if update_submitted and edit_startplats and edit_slutplats and edit_stracka > 0:
-            # Calculate travel time
-            tid_format = "%H:%M"
-            restid = (datetime.strptime(edit_sluttid.strftime(tid_format), tid_format) -
-                      datetime.strptime(edit_starttid.strftime(tid_format), tid_format)).seconds / 60  # minuter
-            
-            updated_journey = {
-                "Datum": edit_datum,
-                "Startid": edit_starttid.strftime("%H:%M"),
-                "Sluttid": edit_sluttid.strftime("%H:%M"),
-                "Restid (min)": int(restid),
-                "Startplats": edit_startplats,
-                "Slutplats": edit_slutplats,
-                "Sträcka (km)": edit_stracka,
-                "Syfte": edit_syfte
-            }
-            
-            # Find and update the journey in session state
-            original_journey = journey_to_edit
-            for i, journey in enumerate(st.session_state.journey_log):
-                # Convert dates for comparison
-                journey_date = journey['Datum']
-                if isinstance(journey_date, str):
-                    journey_date = pd.to_datetime(journey_date).date()
-                elif hasattr(journey_date, 'date'):
-                    journey_date = journey_date.date()
-                
-                original_date = pd.to_datetime(original_journey['Datum']).date()
-                
-                # Match the journey to update
-                if (journey_date == original_date and 
-                    journey['Startplats'] == original_journey['Startplats'] and
-                    journey['Slutplats'] == original_journey['Slutplats'] and
-                    journey['Sträcka (km)'] == original_journey['Sträcka (km)'] and
-                    journey['Syfte'] == original_journey['Syfte']):
-                    st.session_state.journey_log[i] = updated_journey
-                    break
-            
-            # Save to Excel
-            df_to_save = pd.DataFrame(st.session_state.journey_log)
-            df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
-            
-            # Clear edit state
-            st.session_state.editing_journey = False
-            if 'journey_to_edit' in st.session_state:
-                del st.session_state['journey_to_edit']
-            if 'edit_index' in st.session_state:
-                del st.session_state['edit_index']
-            
-            st.success("Resa uppdaterad!")
-            st.rerun()
-        
-        if cancel_edit:
-            # Clear edit state
-            st.session_state.editing_journey = False
-            if 'journey_to_edit' in st.session_state:
-                del st.session_state['journey_to_edit']
-            if 'edit_index' in st.session_state:
-                del st.session_state['edit_index']
-            st.rerun()
 
 else:
     filtered_df = pd.DataFrame()  # Empty dataframe when no journeys
