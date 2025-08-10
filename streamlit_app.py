@@ -13,6 +13,7 @@ excel_fil = "korjournal.xlsx"
 def ladda_data():
     try:
         df = pd.read_excel(excel_fil, engine="openpyxl", parse_dates=["Datum"])
+        st.info(f"Laddade {len(df)} resor från Excel-fil")
         return df.to_dict(orient="records")
     except FileNotFoundError:
         st.info("Ingen körjournal hittades. Skapar ny.")
@@ -90,8 +91,14 @@ st.sidebar.info(f"Session State Resor: {len(st.session_state.journey_log)}")
 try:
     debug_df = pd.read_excel(excel_fil, engine="openpyxl")
     st.sidebar.info(f"Excel Fil Resor: {len(debug_df)}")
-except:
-    st.sidebar.warning("Kan inte läsa Excel fil")
+    
+    # Show Excel file info
+    if len(debug_df) > 0:
+        st.sidebar.info(f"Excel kolumner: {list(debug_df.columns)}")
+        st.sidebar.info(f"Första rad i Excel: {debug_df.iloc[0].to_dict() if len(debug_df) > 0 else 'Tom'}")
+        
+except Exception as excel_error:
+    st.sidebar.error(f"Kan inte läsa Excel fil: {excel_error}")
 
 if st.sidebar.button("Synkronisera från Excel"):
     st.session_state.journey_log = ladda_data()
@@ -196,13 +203,31 @@ if uploaded_file is not None:
         if st.button("Importera data", key="import_excel"):
             # Convert to list of dicts and merge with existing data
             imported_data = df_upload.to_dict(orient="records")
+            
+            # Debug information
+            st.info(f"Antal resor i uppladdad fil: {len(imported_data)}")
+            st.info(f"Antal befintliga resor i session: {len(st.session_state.journey_log)}")
+            
+            # Add imported data to session state
             st.session_state.journey_log.extend(imported_data)
+            
+            st.info(f"Totalt antal resor efter import: {len(st.session_state.journey_log)}")
             
             # Save combined data to Excel
             df_combined = pd.DataFrame(st.session_state.journey_log)
-            df_combined.to_excel(excel_fil, index=False, engine="openpyxl")
+            st.info(f"Antal resor som ska sparas till Excel: {len(df_combined)}")
             
-            st.success(f"Importerade {len(imported_data)} resor!")
+            try:
+                df_combined.to_excel(excel_fil, index=False, engine="openpyxl")
+                st.success(f"Importerade {len(imported_data)} resor!")
+                
+                # Verify the save by reading it back
+                verify_df = pd.read_excel(excel_fil, engine="openpyxl")
+                st.info(f"Verifiering: Excel-filen innehåller nu {len(verify_df)} resor")
+                
+            except Exception as save_error:
+                st.error(f"Fel vid sparning till Excel: {save_error}")
+            
             st.rerun()
             
     except Exception as e:
