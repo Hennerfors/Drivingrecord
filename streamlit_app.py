@@ -105,6 +105,19 @@ if st.sidebar.button("Synkronisera från Excel"):
     st.sidebar.success("Data uppdaterad från Excel!")
     st.rerun()
 
+# Extra debug-knapp
+if st.sidebar.button("🔍 Detaljerad Excel-analys"):
+    try:
+        df_check = pd.read_excel(excel_fil, engine="openpyxl")
+        st.sidebar.success(f"Excel innehåller {len(df_check)} rader")
+        
+        if len(df_check) > 0:
+            st.sidebar.info(f"Sista 3 raderna:")
+            for i, row in df_check.tail(3).iterrows():
+                st.sidebar.text(f"Rad {i}: {row['Datum']} - {row['Startplats']}")
+    except Exception as e:
+        st.sidebar.error(f"Kunde inte läsa Excel: {e}")
+
 # Formulär för att lägga till ny resa
 with st.form("add_journey_form"):
     st.subheader("Lägg till ny resa")
@@ -199,39 +212,62 @@ if uploaded_file is not None:
         # Show preview of data
         st.subheader("Förhandsgranskning av data:")
         st.dataframe(df_upload.head())
+        st.info(f"📊 Uppladdad fil innehåller {len(df_upload)} resor")
+        st.info(f"📋 Kolumner i filen: {list(df_upload.columns)}")
         
         if st.button("Importera data", key="import_excel"):
             # Convert to list of dicts and merge with existing data
             imported_data = df_upload.to_dict(orient="records")
             
             # Debug information
-            st.info(f"Antal resor i uppladdad fil: {len(imported_data)}")
-            st.info(f"Antal befintliga resor i session: {len(st.session_state.journey_log)}")
+            st.info(f"🔢 Antal resor i uppladdad fil: {len(imported_data)}")
+            st.info(f"📦 Antal befintliga resor i session: {len(st.session_state.journey_log)}")
+            
+            # Show sample of imported data
+            if len(imported_data) > 0:
+                st.info(f"📝 Exempel på importerad data: {imported_data[0]}")
             
             # Add imported data to session state
+            old_count = len(st.session_state.journey_log)
             st.session_state.journey_log.extend(imported_data)
+            new_count = len(st.session_state.journey_log)
             
-            st.info(f"Totalt antal resor efter import: {len(st.session_state.journey_log)}")
+            st.info(f"📈 Session state: {old_count} → {new_count} resor")
             
-            # Save combined data to Excel
-            df_combined = pd.DataFrame(st.session_state.journey_log)
-            st.info(f"Antal resor som ska sparas till Excel: {len(df_combined)}")
-            
+            # Save combined data to Excel with error handling
             try:
-                df_combined.to_excel(excel_fil, index=False, engine="openpyxl")
-                st.success(f"Importerade {len(imported_data)} resor!")
+                df_combined = pd.DataFrame(st.session_state.journey_log)
+                st.info(f"💾 Försöker spara {len(df_combined)} resor till Excel...")
                 
-                # Verify the save by reading it back
+                # Check if the DataFrame looks correct
+                st.info(f"📋 DataFrame kolumner: {list(df_combined.columns)}")
+                
+                # Save to Excel
+                df_combined.to_excel(excel_fil, index=False, engine="openpyxl")
+                st.success(f"✅ Sparade DataFrame med {len(df_combined)} resor")
+                
+                # Verify the save by reading it back immediately
                 verify_df = pd.read_excel(excel_fil, engine="openpyxl")
-                st.info(f"Verifiering: Excel-filen innehåller nu {len(verify_df)} resor")
+                st.info(f"🔍 Verifiering: Excel-filen innehåller {len(verify_df)} resor efter sparning")
+                
+                if len(verify_df) != len(df_combined):
+                    st.error(f"🚨 PROBLEM: Sparade {len(df_combined)} men Excel innehåller bara {len(verify_df)}!")
+                    
+                    # Show details about what was lost
+                    st.error(f"💔 {len(df_combined) - len(verify_df)} resor försvann under sparningen!")
+                else:
+                    st.success(f"✅ Import lyckades! Alla {len(imported_data)} resor sparades korrekt")
                 
             except Exception as save_error:
-                st.error(f"Fel vid sparning till Excel: {save_error}")
+                st.error(f"❌ Fel vid sparning till Excel: {save_error}")
+                st.error(f"📋 Typ av fel: {type(save_error).__name__}")
             
-            st.rerun()
+            # Ta bort st.rerun() för att se om det hjälper
+            st.info("🔄 Uppdatera sidan manuellt för att se ändringarna")
             
     except Exception as e:
-        st.error(f"Fel vid inläsning av filen: {e}")
+        st.error(f"❌ Fel vid inläsning av filen: {e}")
+        st.error(f"📋 Typ av fel: {type(e).__name__}")
 
 # 📊 Visa och filtrera resor
 st.markdown("---")
