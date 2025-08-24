@@ -353,7 +353,6 @@ if st.session_state.journey_log:
     if "Månad" not in df_filtered.columns:
         df_filtered["Månad"] = pd.to_datetime(df_filtered["Datum"]).dt.to_period("M")
     df_filtered["Månad"] = df_filtered["Månad"].astype(str)
-    st.dataframe(df_filtered)
     
     # 📥 Ladda ner Excel-fil
     if st.button("Ladda ner som Excel"):
