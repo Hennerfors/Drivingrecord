@@ -376,20 +376,32 @@ if st.session_state.journey_log:
             avg_distance = total_distance / total_journeys
             st.metric("Genomsnittlig sträcka", f"{avg_distance:.1f} km")
     
-    # Monthly statistics
-    if not df_filtered.empty:
-        df_stats = df_filtered.copy()
-        df_stats["Månad"] = pd.to_datetime(df_stats["Datum"]).dt.to_period("M")
-        monthly_stats = df_stats.groupby("Månad").agg({
-            "Sträcka (km)": "sum",
-            "Datum": "count"
-        }).rename(columns={"Datum": "Antal resor"})
-        
-        # Convert period index to string with month names
-        monthly_stats.index = monthly_stats.index.to_timestamp().strftime("%Y %B")
-        monthly_stats = monthly_stats.sort_index()  # sortera månaderna i ordning
-        st.subheader("📊 Månadsstatistik")
-        st.bar_chart(monthly_stats["Sträcka (km)"])
+    # ...existing code...
+    df_filtered["Månad"] = pd.to_datetime(df_filtered["Datum"]).dt.to_period("M")
+    monthly_stats = df_filtered.groupby("Månad").agg({
+        "Sträcka (km)": "sum",
+        "Datum": "count"
+    }).rename(columns={"Datum": "Antal resor"})
+
+    # Debug: visa index före sortering
+    st.write("Index före sortering:", monthly_stats.index)
+
+    # Sortera efter år och månad med sort_index på PeriodIndex
+    monthly_stats = monthly_stats.sort_index()
+
+    # Debug: visa index efter sortering
+    st.write("Index efter sortering:", monthly_stats.index)
+
+    # Visa månadsnamn i format "År Månad"
+    month_names = monthly_stats.index.to_timestamp().strftime("%Y %B")
+    monthly_stats["month_name"] = month_names
+    # Gör month_name till en kategorisk kolumn med rätt ordning
+    monthly_stats["month_name"] = pd.Categorical(monthly_stats["month_name"], categories=list(month_names), ordered=True)
+    monthly_stats = monthly_stats.set_index("month_name")
+
+    st.subheader("📊 Månadsstatistik")
+    st.bar_chart(monthly_stats["Sträcka (km)"])
+    # ...existing code...
 
 # 🗑️ Ta bort resor
 st.markdown("---")
