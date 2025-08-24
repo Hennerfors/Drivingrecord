@@ -3,6 +3,7 @@ import pandas as pd
 import pydeck as pdk
 from datetime import date
 from datetime import datetime
+import os
 
 # Konfigurera sidlayout
 st.set_page_config(page_title="Körjournal", page_icon="🚗", layout="wide")
@@ -21,6 +22,12 @@ def ladda_data():
     except Exception as e:
         st.error(f"Fel vid inladdning av data: {e}")
         return []
+
+def log_excel_save(action, antal_resor):
+    log_path = "korjournal_log.txt"
+    with open(log_path, "a", encoding="utf-8") as f:
+        from datetime import datetime
+        f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {action}: {antal_resor} resor sparades till Excel\n")
 
 # Ladda befintlig data eller skapa ny
 if "journey_log" not in st.session_state:
@@ -78,6 +85,7 @@ if st.button("Registrera arbetsdagens resor", key="add_work_journeys"):
     # Save to Excel
     df_to_save = pd.DataFrame(st.session_state.journey_log)
     df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
+    log_excel_save("Snabbregistrera arbetsdagens resor", len(df_to_save))
     st.success("Resorna till och från jobbet har registrerats!")
     st.rerun()
 
@@ -153,6 +161,7 @@ with st.form("add_journey_form"):
         # Save to Excel
         df_to_save = pd.DataFrame(st.session_state.journey_log)
         df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
+        log_excel_save("Lägg till ny resa", len(df_to_save))
         st.success("Resa sparad!")
         st.rerun()  # Refresh the app to show new data
 
@@ -195,6 +204,7 @@ if st.button("Lägg till resor", key="add_multiple_journeys"):
         # Save to Excel
         df_to_save = pd.DataFrame(st.session_state.journey_log)
         df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
+        log_excel_save("Lägg till flera resor", len(df_to_save))
         st.success(f"{len(nya_resor)} resor har lagts till!")
         st.rerun()
     else:
@@ -244,6 +254,7 @@ if uploaded_file is not None:
                 
                 # Save to Excel
                 df_combined.to_excel(excel_fil, index=False, engine="openpyxl")
+                log_excel_save("Importera data från Excel", len(df_combined))
                 st.success(f"✅ Sparade DataFrame med {len(df_combined)} resor")
                 
                 # Verify the save by reading it back immediately
@@ -327,6 +338,7 @@ if st.session_state.journey_log:
                 st.session_state.journey_log = []
                 # Also clear the Excel file
                 pd.DataFrame().to_excel(excel_fil, index=False, engine="openpyxl")
+                log_excel_save("Ta bort alla resor", 0)
                 st.sidebar.success("Alla resor har tagits bort!")
                 st.rerun()
     
@@ -435,7 +447,7 @@ if st.session_state.journey_log:
                     # Save to Excel
                     df_to_save = pd.DataFrame(st.session_state.journey_log)
                     df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
-                    
+                    log_excel_save("Redigera resa", len(df_to_save))
                     st.success("Resa uppdaterad!")
                     st.rerun()
             
@@ -447,7 +459,7 @@ if st.session_state.journey_log:
                     # Save to Excel
                     df_to_save = pd.DataFrame(st.session_state.journey_log)
                     df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
-                    
+                    log_excel_save("Ta bort enskild resa", len(df_to_save))
                     st.success("Resa borttagen!")
                     st.rerun()
 
