@@ -11,10 +11,13 @@ st.set_page_config(page_title="Körjournal", page_icon="🚗", layout="wide")
 excel_fil = "korjournal.xlsx"
 
 # Funktion för att ladda data från Excel
+# Lägg till extra debug vid laddning
+
 def ladda_data():
     try:
         df = pd.read_excel(excel_fil, engine="openpyxl", parse_dates=["Datum"])
         st.info(f"Laddade {len(df)} resor från Excel-fil")
+        st.write("Debug: Data från Excel:", df)
         return df.to_dict(orient="records")
     except FileNotFoundError:
         st.info("Ingen körjournal hittades. Skapar ny.")
