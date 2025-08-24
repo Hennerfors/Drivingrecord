@@ -84,6 +84,8 @@ if st.button("Registrera arbetsdagens resor", key="add_work_journeys"):
     
     # Save to Excel
     df_to_save = pd.DataFrame(st.session_state.journey_log)
+    if "Datum" in df_to_save.columns:
+        df_to_save["Datum"] = pd.to_datetime(df_to_save["Datum"]).dt.strftime("%Y-%m-%d")
     df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
     log_excel_save("Snabbregistrera arbetsdagens resor", len(df_to_save))
     st.success("Resorna till och från jobbet har registrerats!")
@@ -143,7 +145,6 @@ with st.form("add_journey_form"):
         tid_format = "%H:%M"
         restid = (datetime.strptime(sluttid.strftime(tid_format), tid_format) -
                   datetime.strptime(starttid.strftime(tid_format), tid_format)).seconds / 60  # minuter
-        
         ny_resa = {
             "Datum": datum,
             "Startid": starttid.strftime("%H:%M"),
@@ -154,12 +155,12 @@ with st.form("add_journey_form"):
             "Sträcka (km)": stracka,
             "Syfte": syfte
         }
-        
         # Add to session state
         st.session_state.journey_log.append(ny_resa)
-        
         # Save to Excel
         df_to_save = pd.DataFrame(st.session_state.journey_log)
+        if "Datum" in df_to_save.columns:
+            df_to_save["Datum"] = pd.to_datetime(df_to_save["Datum"]).dt.strftime("%Y-%m-%d")
         df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
         log_excel_save("Lägg till ny resa", len(df_to_save))
         st.success("Resa sparad!")
@@ -185,7 +186,6 @@ if st.button("Lägg till resor", key="add_multiple_journeys"):
         for d in datum_lista:
             restid = (datetime.strptime(sluttid_multi.strftime("%H:%M"), "%H:%M") -
                       datetime.strptime(starttid_multi.strftime("%H:%M"), "%H:%M")).seconds / 60
-
             resa = {
                 "Datum": d,  # d is already a date object now
                 "Startid": starttid_multi.strftime("%H:%M"),
@@ -197,12 +197,12 @@ if st.button("Lägg till resor", key="add_multiple_journeys"):
                 "Syfte": syfte_multi
             }
             nya_resor.append(resa)
-
         # Add to session state
         st.session_state.journey_log.extend(nya_resor)
-        
         # Save to Excel
         df_to_save = pd.DataFrame(st.session_state.journey_log)
+        if "Datum" in df_to_save.columns:
+            df_to_save["Datum"] = pd.to_datetime(df_to_save["Datum"]).dt.strftime("%Y-%m-%d")
         df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
         log_excel_save("Lägg till flera resor", len(df_to_save))
         st.success(f"{len(nya_resor)} resor har lagts till!")
@@ -253,6 +253,8 @@ if uploaded_file is not None:
                 st.info(f"📋 DataFrame kolumner: {list(df_combined.columns)}")
                 
                 # Save to Excel
+                if "Datum" in df_combined.columns:
+                    df_combined["Datum"] = pd.to_datetime(df_combined["Datum"]).dt.strftime("%Y-%m-%d")
                 df_combined.to_excel(excel_fil, index=False, engine="openpyxl")
                 log_excel_save("Importera data från Excel", len(df_combined))
                 st.success(f"✅ Sparade DataFrame med {len(df_combined)} resor")
@@ -344,6 +346,11 @@ if st.session_state.journey_log:
     
     # Display filtered data
     st.dataframe(df_filtered)
+    # Visa även månadskolumn
+    if "Månad" not in df_filtered.columns:
+        df_filtered["Månad"] = pd.to_datetime(df_filtered["Datum"]).dt.to_period("M")
+    df_filtered["Månad"] = df_filtered["Månad"].astype(str)
+    st.dataframe(df_filtered)
     
     # 📥 Ladda ner Excel-fil
     if st.button("Ladda ner som Excel"):
@@ -376,7 +383,7 @@ if st.session_state.journey_log:
             avg_distance = total_distance / total_journeys
             st.metric("Genomsnittlig sträcka", f"{avg_distance:.1f} km")
     
-    # ...existing code...
+    # Månadsstatistik
     df_filtered["Månad"] = pd.to_datetime(df_filtered["Datum"]).dt.to_period("M")
     monthly_stats = df_filtered.groupby("Månad").agg({
         "Sträcka (km)": "sum",
@@ -401,7 +408,6 @@ if st.session_state.journey_log:
 
     st.subheader("📊 Månadsstatistik")
     st.bar_chart(monthly_stats["Sträcka (km)"])
-    # ...existing code...
 
 # 🗑️ Ta bort resor
 st.markdown("---")
@@ -458,6 +464,8 @@ if st.session_state.journey_log:
                     
                     # Save to Excel
                     df_to_save = pd.DataFrame(st.session_state.journey_log)
+                    if "Datum" in df_to_save.columns:
+                        df_to_save["Datum"] = pd.to_datetime(df_to_save["Datum"]).dt.strftime("%Y-%m-%d")
                     df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
                     log_excel_save("Redigera resa", len(df_to_save))
                     st.success("Resa uppdaterad!")
@@ -470,6 +478,8 @@ if st.session_state.journey_log:
                     
                     # Save to Excel
                     df_to_save = pd.DataFrame(st.session_state.journey_log)
+                    if "Datum" in df_to_save.columns:
+                        df_to_save["Datum"] = pd.to_datetime(df_to_save["Datum"]).dt.strftime("%Y-%m-%d")
                     df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
                     log_excel_save("Ta bort enskild resa", len(df_to_save))
                     st.success("Resa borttagen!")
