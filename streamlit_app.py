@@ -387,7 +387,7 @@ if st.session_state.journey_log:
         
         # Convert period index to string with month names
         monthly_stats.index = monthly_stats.index.to_timestamp().strftime("%Y %B")
-        
+        monthly_stats = monthly_stats.sort_index()  # sortera månaderna i ordning
         st.subheader("📊 Månadsstatistik")
         st.bar_chart(monthly_stats["Sträcka (km)"])
 
