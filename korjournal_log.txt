@@ -1,6 +1,1 @@
-[2025-08-24 18:44:30] Importera data från Excel: 146 resor sparades till Excel
-[2025-08-24 18:55:27] Ta bort alla resor: 0 resor sparades till Excel
-[2025-08-24 18:55:37] Importera data från Excel: 146 resor sparades till Excel
-[2025-08-24 19:03:14] Redigera resa: 146 resor sparades till Excel
-[2025-08-24 19:10:54] Lägg till ny resa: 147 resor sparades till Excel
-[2025-08-26 19:44:20] Ta bort enskild resa: 146 resor sparades till Excel
+
