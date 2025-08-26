@@ -392,12 +392,6 @@ if st.session_state.journey_log:
         "Datum": "count"
     }).rename(columns={"Datum": "Antal resor"})
 
-    # Debug: visa index före sortering
-    st.write("Index före sortering:", monthly_stats.index)
-
-    # Sortera efter år och månad med sort_index på PeriodIndex
-    monthly_stats = monthly_stats.sort_index()
-
     # Debug: visa index efter sortering
     st.write("Index efter sortering:", monthly_stats.index)
 
