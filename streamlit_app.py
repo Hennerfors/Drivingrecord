@@ -89,6 +89,7 @@ if st.button("Registrera arbetsdagens resor", key="add_work_journeys"):
     df_to_save = pd.DataFrame(st.session_state.journey_log)
     if "Datum" in df_to_save.columns:
         df_to_save["Datum"] = pd.to_datetime(df_to_save["Datum"]).dt.strftime("%Y-%m-%d")
+    st.write("Debug: Data som sparas till Excel:", df_to_save)
     df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
     log_excel_save("Snabbregistrera arbetsdagens resor", len(df_to_save))
     st.success("Resorna till och från jobbet har registrerats!")
@@ -164,6 +165,7 @@ with st.form("add_journey_form"):
         df_to_save = pd.DataFrame(st.session_state.journey_log)
         if "Datum" in df_to_save.columns:
             df_to_save["Datum"] = pd.to_datetime(df_to_save["Datum"]).dt.strftime("%Y-%m-%d")
+        st.write("Debug: Data som sparas till Excel:", df_to_save)
         df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
         log_excel_save("Lägg till ny resa", len(df_to_save))
         st.success("Resa sparad!")
@@ -206,6 +208,7 @@ if st.button("Lägg till resor", key="add_multiple_journeys"):
         df_to_save = pd.DataFrame(st.session_state.journey_log)
         if "Datum" in df_to_save.columns:
             df_to_save["Datum"] = pd.to_datetime(df_to_save["Datum"]).dt.strftime("%Y-%m-%d")
+        st.write("Debug: Data som sparas till Excel:", df_to_save)
         df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
         log_excel_save("Lägg till flera resor", len(df_to_save))
         st.success(f"{len(nya_resor)} resor har lagts till!")
@@ -258,6 +261,7 @@ if uploaded_file is not None:
                 # Save to Excel
                 if "Datum" in df_combined.columns:
                     df_combined["Datum"] = pd.to_datetime(df_combined["Datum"]).dt.strftime("%Y-%m-%d")
+                st.write("Debug: Data som sparas till Excel:", df_combined)
                 df_combined.to_excel(excel_fil, index=False, engine="openpyxl")
                 log_excel_save("Importera data från Excel", len(df_combined))
                 st.success(f"✅ Sparade DataFrame med {len(df_combined)} resor")
@@ -462,6 +466,7 @@ if st.session_state.journey_log:
                     df_to_save = pd.DataFrame(st.session_state.journey_log)
                     if "Datum" in df_to_save.columns:
                         df_to_save["Datum"] = pd.to_datetime(df_to_save["Datum"]).dt.strftime("%Y-%m-%d")
+                    st.write("Debug: Data som sparas till Excel:", df_to_save)
                     df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
                     log_excel_save("Redigera resa", len(df_to_save))
                     st.success("Resa uppdaterad!")
@@ -476,6 +481,7 @@ if st.session_state.journey_log:
                     df_to_save = pd.DataFrame(st.session_state.journey_log)
                     if "Datum" in df_to_save.columns:
                         df_to_save["Datum"] = pd.to_datetime(df_to_save["Datum"]).dt.strftime("%Y-%m-%d")
+                    st.write("Debug: Data som sparas till Excel:", df_to_save)
                     df_to_save.to_excel(excel_fil, index=False, engine="openpyxl")
                     log_excel_save("Ta bort enskild resa", len(df_to_save))
                     st.success("Resa borttagen!")
