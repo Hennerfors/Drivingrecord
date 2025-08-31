@@ -35,6 +35,9 @@ def log_excel_save(action, antal_resor):
 # Ladda befintlig data eller skapa ny
 if "journey_log" not in st.session_state:
     st.session_state.journey_log = ladda_data()
+else:
+    # Synka alltid session state med Excel vid start
+    st.session_state.journey_log = ladda_data()
 
 st.title("🚗 Körjournal")
 st.markdown("---")
