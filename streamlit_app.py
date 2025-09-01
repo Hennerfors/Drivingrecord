@@ -104,6 +104,38 @@ st.markdown("---")
 st.sidebar.title("📊 Diagnostik")
 st.sidebar.info(f"Session State Resor: {len(st.session_state.journey_log)}")
 
+# Visa de senaste 10 resorna från session state
+if st.session_state.journey_log:
+    st.sidebar.markdown("**Senaste 10 resor i session state:**")
+    for i, resa in enumerate(st.session_state.journey_log[-10:]):
+        date_str = resa["Datum"].strftime("%Y-%m-%d") if hasattr(resa["Datum"], "strftime") else str(resa["Datum"])
+        st.sidebar.text(f"{len(st.session_state.journey_log)-10+i}: {date_str} - {resa['Startplats']} → {resa['Slutplats']}")
+
+# Visa de senaste 10 resorna från Excel och jämför antal
+try:
+    debug_df = pd.read_excel(excel_fil, engine="openpyxl")
+    st.sidebar.info(f"Excel Fil Resor: {len(debug_df)}")
+    if len(debug_df) > 0:
+        st.sidebar.markdown("**Senaste 10 resor i Excel:**")
+        for i, row in debug_df.tail(10).iterrows():
+            st.sidebar.text(f"{i}: {row['Datum']} - {row['Startplats']} → {row['Slutplats']}")
+    # Jämför session state och Excel
+    excel_count = len(debug_df)
+    session_count = len(st.session_state.journey_log)
+    if excel_count != session_count:
+        st.sidebar.warning(f"Skillnad mellan session state ({session_count}) och Excel ({excel_count})!")
+        # Visa vilka resor som saknas om möjligt
+        excel_set = set(tuple(row.items()) for _, row in debug_df.iterrows())
+        session_set = set(tuple(resa.items()) for resa in st.session_state.journey_log)
+        missing_in_excel = session_set - excel_set
+        missing_in_session = excel_set - session_set
+        if missing_in_excel:
+            st.sidebar.error(f"Resor i session state men saknas i Excel: {len(missing_in_excel)}")
+        if missing_in_session:
+            st.sidebar.error(f"Resor i Excel men saknas i session state: {len(missing_in_session)}")
+except Exception as e:
+    st.sidebar.error(f"Fel vid jämförelse session/Excel: {e}")
+
 # Försök att läsa Excel för jämförelse
 try:
     debug_df = pd.read_excel(excel_fil, engine="openpyxl")
