@@ -1,7 +1,24 @@
+import os
 import streamlit as st
 import pandas as pd
 from datetime import date, datetime
-from streamlit_gsheets import GSheetsConnection
+
+# Försök importera streamlit_gsheets; om paketet saknas, använd lokal Excel-fallback.
+import importlib
+import importlib.util
+
+spec = importlib.util.find_spec("streamlit_gsheets")
+if spec is not None:
+    try:
+        module = importlib.import_module("streamlit_gsheets")
+        GSheetsConnection = getattr(module, "GSheetsConnection", None)
+        USE_GSHEETS = GSheetsConnection is not None
+    except Exception:
+        GSheetsConnection = None
+        USE_GSHEETS = False
+else:
+    GSheetsConnection = None
+    USE_GSHEETS = False
 
 # --- KONFIGURATION ---
 st.set_page_config(page_title="Körjournal Cloud", page_icon="🚗", layout="wide")
@@ -9,48 +26,64 @@ st.set_page_config(page_title="Körjournal Cloud", page_icon="🚗", layout="wid
 # --- FUNKTIONER ---
 
 def get_data():
-    """Hämtar data från Google Sheets."""
-    try:
-        # Skapa anslutning
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        # Hämta data (ttl=0 gör att den inte cachar gammal data)
-        df = conn.read(ttl=0)
-        
-        # Om arket är tomt eller saknar kolumner, skapa struktur
-        expected_cols = ["Datum", "Starttid", "Sluttid", "Restid (min)", 
-                         "Startplats", "Slutplats", "Sträcka (km)", "Syfte"]
-        
-        # Säkerställ att vi har rätt kolumner även om arket är tomt
-        for col in expected_cols:
-            if col not in df.columns:
-                df[col] = pd.Series(dtype='object')
-                
-        # Konvertera Datum till datum-objekt
-        df["Datum"] = pd.to_datetime(df["Datum"], errors='coerce').dt.date
-        # Rensa bort rader där datum saknas (tomma rader i sheets)
-        df = df.dropna(subset=["Datum"])
-        
-        return df
-    except Exception as e:
-        st.error(f"Kunde inte hämta data från Google Sheets: {e}")
-        return pd.DataFrame()
+    """Hämtar data från Google Sheets eller lokal Excel som fallback."""
+    expected_cols = ["Datum", "Starttid", "Sluttid", "Restid (min)",
+                     "Startplats", "Slutplats", "Sträcka (km)", "Syfte"]
+
+    if USE_GSHEETS and GSheetsConnection is not None:
+        try:
+            conn = st.connection("gsheets", type=GSheetsConnection)
+            df = conn.read(ttl=0)
+            for col in expected_cols:
+                if col not in df.columns:
+                    df[col] = pd.Series(dtype='object')
+            df["Datum"] = pd.to_datetime(df["Datum"], errors='coerce').dt.date
+            df = df.dropna(subset=["Datum"])
+            return df
+        except Exception as e:
+            st.error(f"Kunde inte hämta data från Google Sheets: {e}")
+            return pd.DataFrame(columns=expected_cols)
+    else:
+        # Lokal Excel-fallback
+        excel_path = "korjournal.xlsx"
+        if os.path.exists(excel_path):
+            try:
+                df = pd.read_excel(excel_path, engine="openpyxl")
+                for col in expected_cols:
+                    if col not in df.columns:
+                        df[col] = pd.Series(dtype='object')
+                df["Datum"] = pd.to_datetime(df["Datum"], errors='coerce').dt.date
+                df = df.dropna(subset=["Datum"])
+                return df
+            except Exception as e:
+                st.error(f"Kunde inte läsa lokal Excel-fil: {e}")
+                return pd.DataFrame(columns=expected_cols)
+        else:
+            return pd.DataFrame(columns=expected_cols)
 
 def save_data(df):
-    """Sparar dataframe till Google Sheets."""
-    try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        
-        # Förbered data för export (konvertera datum till sträng för att undvika fel)
-        df_save = df.copy()
-        df_save["Datum"] = pd.to_datetime(df_save["Datum"]).dt.strftime("%Y-%m-%d")
-        
-        # Uppdatera Google Sheet
-        conn.update(data=df_save)
-        st.cache_data.clear() # Rensa cache så vi ser ändringen direkt
-        return True
-    except Exception as e:
-        st.error(f"Kunde inte spara till Google Sheets: {e}")
-        return False
+    """Sparar dataframe till Google Sheets eller lokal Excel som fallback."""
+    if USE_GSHEETS and GSheetsConnection is not None:
+        try:
+            conn = st.connection("gsheets", type=GSheetsConnection)
+            df_save = df.copy()
+            df_save["Datum"] = pd.to_datetime(df_save["Datum"]).dt.strftime("%Y-%m-%d")
+            conn.update(data=df_save)
+            st.cache_data.clear() # Rensa cache så vi ser ändringen direkt
+            return True
+        except Exception as e:
+            st.error(f"Kunde inte spara till Google Sheets: {e}")
+            return False
+    else:
+        try:
+            df_save = df.copy()
+            if "Datum" in df_save.columns:
+                df_save["Datum"] = pd.to_datetime(df_save["Datum"]).dt.strftime("%Y-%m-%d")
+            df_save.to_excel("korjournal.xlsx", index=False, engine="openpyxl")
+            return True
+        except Exception as e:
+            st.error(f"Kunde inte spara till lokal Excel-fil: {e}")
+            return False
 
 def rakna_ut_restid(start_str, slut_str):
     try:
