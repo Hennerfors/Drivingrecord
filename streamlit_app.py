@@ -1,66 +1,77 @@
 import streamlit as st
 import pandas as pd
 from datetime import date, datetime
-from streamlit_gsheets import GSheetsConnection
+import os
 
 # --- KONFIGURATION ---
-st.set_page_config(page_title="Körjournal Cloud", page_icon="🚗", layout="wide")
+st.set_page_config(page_title="Körjournal", page_icon="🚗", layout="wide")
+
+EXCEL_FIL = "korjournal.xlsx"
+LOG_FIL = "korjournal_log.txt"
 
 # --- FUNKTIONER ---
 
-def get_data():
-    """Hämtar data från Google Sheets."""
+def ladda_data():
+    """Laddar data från Excel och säkerställer korrekta datatyper."""
+    if not os.path.exists(EXCEL_FIL):
+        return pd.DataFrame(columns=[
+            "Datum", "Starttid", "Sluttid", "Restid (min)", 
+            "Startplats", "Slutplats", "Sträcka (km)", "Syfte"
+        ])
+    
     try:
-        # Skapa anslutning
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        # Hämta data (ttl=0 gör att den inte cachar gammal data)
-        df = conn.read(ttl=0)
+        df = pd.read_excel(EXCEL_FIL, engine="openpyxl")
+        if "Datum" in df.columns:
+            df["Datum"] = pd.to_datetime(df["Datum"]).dt.date
         
-        # Om arket är tomt eller saknar kolumner, skapa struktur
-        expected_cols = ["Datum", "Starttid", "Sluttid", "Restid (min)", 
-                         "Startplats", "Slutplats", "Sträcka (km)", "Syfte"]
-        
-        # Säkerställ att vi har rätt kolumner även om arket är tomt
-        for col in expected_cols:
-            if col not in df.columns:
-                df[col] = pd.Series(dtype='object')
+        # Se till att tider tolkas korrekt för editorn
+        for col in ["Starttid", "Sluttid"]:
+            if col in df.columns:
+                # Försök konvertera till time-objekt om det är strängar
+                df[col] = pd.to_datetime(df[col].astype(str), format='%H:%M', errors='coerce').dt.time
                 
-        # Konvertera Datum till datum-objekt
-        df["Datum"] = pd.to_datetime(df["Datum"], errors='coerce').dt.date
-        # Rensa bort rader där datum saknas (tomma rader i sheets)
-        df = df.dropna(subset=["Datum"])
-        
         return df
     except Exception as e:
-        st.error(f"Kunde inte hämta data från Google Sheets: {e}")
+        st.error(f"Fel vid inläsning av data: {e}")
         return pd.DataFrame()
 
-def save_data(df):
-    """Sparar dataframe till Google Sheets."""
+def spara_data(df, action_label="Okänd ändring"):
+    """Sparar DataFrame till Excel."""
     try:
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        
-        # Förbered data för export (konvertera datum till sträng för att undvika fel)
         df_save = df.copy()
-        df_save["Datum"] = pd.to_datetime(df_save["Datum"]).dt.strftime("%Y-%m-%d")
         
-        # Uppdatera Google Sheet
-        conn.update(data=df_save)
-        st.cache_data.clear() # Rensa cache så vi ser ändringen direkt
+        # Konvertera datum till sträng
+        if "Datum" in df_save.columns:
+            df_save["Datum"] = pd.to_datetime(df_save["Datum"]).dt.strftime("%Y-%m-%d")
+            
+        # Konvertera tider till sträng (HH:MM)
+        for col in ["Starttid", "Sluttid"]:
+            if col in df_save.columns:
+                df_save[col] = df_save[col].apply(lambda x: x.strftime("%H:%M") if hasattr(x, "strftime") else str(x))
+            
+        df_save.to_excel(EXCEL_FIL, index=False, engine="openpyxl")
+        
+        # Logga
+        with open(LOG_FIL, "a", encoding="utf-8") as f:
+            tidsstampel = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            f.write(f"[{tidsstampel}] {action_label}: {len(df)} resor sparades.\n")
+            
         return True
+    except PermissionError:
+        st.error("🚨 KAN INTE SPARA! Excel-filen är öppen i ett annat program. Stäng den och försök igen.")
+        return False
     except Exception as e:
-        st.error(f"Kunde inte spara till Google Sheets: {e}")
+        st.error(f"Kunde inte spara data: {e}")
         return False
 
-def rakna_ut_restid(start_str, slut_str):
+def rakna_ut_restid(start, slut):
     try:
-        fmt = "%H:%M"
-        # Hantera om det kommer in som datetime.time objekt
-        s_str = start_str.strftime(fmt) if hasattr(start_str, "strftime") else str(start_str)
-        e_str = slut_str.strftime(fmt) if hasattr(slut_str, "strftime") else str(slut_str)
+        # Hantera både strängar och tidsobjekt
+        s_str = start.strftime("%H:%M") if hasattr(start, "strftime") else str(start)
+        e_str = slut.strftime("%H:%M") if hasattr(slut, "strftime") else str(slut)
         
-        t1 = datetime.strptime(s_str, fmt)
-        t2 = datetime.strptime(e_str, fmt)
+        t1 = datetime.strptime(s_str, "%H:%M")
+        t2 = datetime.strptime(e_str, "%H:%M")
         diff = (t2 - t1).seconds / 60
         return int(diff)
     except:
@@ -68,126 +79,97 @@ def rakna_ut_restid(start_str, slut_str):
 
 # --- HUVUDPROGRAM ---
 
-st.title("🚗 Körjournal (Cloud)")
+if "journey_log_df" not in st.session_state:
+    st.session_state.journey_log_df = ladda_data()
 
-# Ladda data direkt (vi behöver inte session state på samma sätt med GSheets som "databas")
-# Men vi använder det för att hålla redigeringar stabila
-if "journey_df" not in st.session_state:
-    st.session_state.journey_df = get_data()
-
-# Knapp för att tvinga uppdatering
-if st.sidebar.button("🔄 Ladda om data"):
-    st.session_state.journey_df = get_data()
-    st.rerun()
+st.title("🚗 Körjournal (Lokal)")
 
 # --- 1. SNABBREGISTRERING ---
 st.subheader("🏢 Snabbregistrera")
 favoritresor = {
     "Till jobbet": {
-        "Startplats": "Bruksgatan 4D, 78474 Borlänge",
-        "Slutplats": "Kajvägen 13 Parking, Ludvika",
-        "Starttid": "00:30", "Sluttid": "01:07",
-        "Sträcka (km)": 45.7, "Syfte": "Resa till jobbet"
+        "Startplats": "Bruksgatan 4D, 78474 Borlänge", "Slutplats": "Kajvägen 13 Parking, Ludvika",
+        "Starttid": "00:30", "Sluttid": "01:07", "Sträcka (km)": 45.7, "Syfte": "Resa till jobbet"
     },
     "Från jobbet": {
-        "Startplats": "Kajvägen 13 Parking, Ludvika",
-        "Slutplats": "Bruksgatan 4D, 78474 Borlänge",
-        "Starttid": "22:10", "Sluttid": "22:47",
-        "Sträcka (km)": 45.7, "Syfte": "Resa hem från jobbet"
+        "Startplats": "Kajvägen 13 Parking, Ludvika", "Slutplats": "Bruksgatan 4D, 78474 Borlänge",
+        "Starttid": "22:10", "Sluttid": "22:47", "Sträcka (km)": 45.7, "Syfte": "Resa hem från jobbet"
     }
 }
 
-col_date, col_btn = st.columns([1, 2])
-with col_date:
+col1, col2 = st.columns([1, 2])
+with col1:
     work_datum = st.date_input("Datum", value=date.today())
-
-with col_btn:
-    st.write(" ")
-    st.write(" ")
-    if st.button("➕ Lägg till: Till & Från Jobbet"):
+with col2:
+    st.write("")
+    st.write("")
+    if st.button("➕ Lägg till jobb-resor"):
         nya_rader = []
         for namn, resa in favoritresor.items():
-            restid = rakna_ut_restid(resa["Starttid"], resa["Sluttid"])
+            t_start = datetime.strptime(resa["Starttid"], "%H:%M").time()
+            t_slut = datetime.strptime(resa["Sluttid"], "%H:%M").time()
+            
             ny_rad = {
-                "Datum": work_datum,
-                "Starttid": resa["Starttid"],
-                "Sluttid": resa["Sluttid"],
-                "Restid (min)": restid,
-                "Startplats": resa["Startplats"],
-                "Slutplats": resa["Slutplats"],
-                "Sträcka (km)": resa["Sträcka (km)"],
-                "Syfte": resa["Syfte"]
+                "Datum": work_datum, "Starttid": t_start, "Sluttid": t_slut,
+                "Restid (min)": rakna_ut_restid(t_start, t_slut),
+                "Startplats": resa["Startplats"], "Slutplats": resa["Slutplats"],
+                "Sträcka (km)": resa["Sträcka (km)"], "Syfte": resa["Syfte"]
             }
             nya_rader.append(ny_rad)
         
         ny_df = pd.DataFrame(nya_rader)
-        # Slå ihop och spara
-        updated_df = pd.concat([st.session_state.journey_df, ny_df], ignore_index=True)
-        if save_data(updated_df):
-            st.session_state.journey_df = updated_df
-            st.success("✅ Resor sparade till Google Sheets!")
-            st.rerun()
+        st.session_state.journey_log_df = pd.concat([st.session_state.journey_log_df, ny_df], ignore_index=True)
+        spara_data(st.session_state.journey_log_df, "Snabbregistrering")
+        st.rerun()
 
+# --- 2. TABELL ---
 st.markdown("---")
-
-# --- 2. REDIGERA I TABELL ---
 st.subheader("📋 Alla Resor")
-st.info("Ändringar sparas automatiskt till Google Sheets när du redigerar i tabellen.")
 
 column_config = {
-    "Datum": st.column_config.DateColumn("Datum", format="YYYY-MM-DD", step=1),
+    "Datum": st.column_config.DateColumn("Datum", format="YYYY-MM-DD"),
     "Starttid": st.column_config.TimeColumn("Start", format="HH:mm"),
     "Sluttid": st.column_config.TimeColumn("Slut", format="HH:mm"),
     "Restid (min)": st.column_config.NumberColumn("Min", disabled=True),
-    "Startplats": st.column_config.TextColumn("Startplats", width="medium"),
-    "Slutplats": st.column_config.TextColumn("Slutplats", width="medium"),
-    "Sträcka (km)": st.column_config.NumberColumn("Km", format="%.1f", min_value=0),
-    "Syfte": st.column_config.TextColumn("Syfte", width="medium"),
+    "Sträcka (km)": st.column_config.NumberColumn("Km", format="%.1f"),
 }
 
 edited_df = st.data_editor(
-    st.session_state.journey_df,
+    st.session_state.journey_log_df,
     column_config=column_config,
     num_rows="dynamic",
     use_container_width=True,
-    key="editor",
     hide_index=True
 )
 
-# Kolla om något ändrats jämfört med vad vi hade i minnet
-if not edited_df.equals(st.session_state.journey_df):
-    # Enkel beräkning av restid (samma som förut)
+if not edited_df.equals(st.session_state.journey_log_df):
+    # Räkna om tider
     for index, row in edited_df.iterrows():
         try:
             val = rakna_ut_restid(row["Starttid"], row["Sluttid"])
-            if val > 0:
-                edited_df.at[index, "Restid (min)"] = val
-        except:
-            pass
-            
-    # Spara till Google Sheets
-    if save_data(edited_df):
-        st.session_state.journey_df = edited_df
-        st.toast("💾 Sparat till molnet!", icon="☁️")
-        # Vi gör ingen rerun här direkt för det kan störa skrivandet, 
-        # men datan är sparad.
+            if val > 0: edited_df.at[index, "Restid (min)"] = val
+        except: pass
+    
+    st.session_state.journey_log_df = edited_df
+    if spara_data(edited_df, "Manuell ändring"):
+        st.toast("✅ Sparat!")
 
-# --- 3. STATISTIK ---
-with st.sidebar:
-    st.header("📊 Statistik")
-    if not st.session_state.journey_df.empty:
-        df = st.session_state.journey_df
-        total_km = df["Sträcka (km)"].sum()
-        st.metric("Total sträcka", f"{total_km:.0f} km")
-        st.metric("Antal resor", len(df))
-        
-        st.markdown("---")
-        # Månadsstatistik
+# --- 3. EXCEL-IMPORT (För moln-användning) ---
+st.markdown("---")
+with st.expander("📤 Ladda upp Excel (Om du bytt dator/moln)"):
+    uploaded_file = st.file_uploader("Välj din korjournal.xlsx", type="xlsx")
+    if uploaded_file and st.button("Importera fil"):
         try:
-            chart_df = df.copy()
-            chart_df["Datum"] = pd.to_datetime(chart_df["Datum"])
-            chart_df["Månad"] = chart_df["Datum"].dt.strftime("%Y-%m")
-            monthly = chart_df.groupby("Månad")["Sträcka (km)"].sum()
-            st.bar_chart(monthly)
-        except:
-            pass
+            ny_data = pd.read_excel(uploaded_file, engine="openpyxl")
+            # Konvertera
+            if "Datum" in ny_data.columns: ny_data["Datum"] = pd.to_datetime(ny_data["Datum"]).dt.date
+            for c in ["Starttid", "Sluttid"]:
+                if c in ny_data.columns:
+                    ny_data[c] = pd.to_datetime(ny_data[c].astype(str), format='%H:%M', errors='coerce').dt.time
+            
+            st.session_state.journey_log_df = ny_data
+            spara_data(ny_data, "Import")
+            st.success("Data importerad!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Fel: {e}")
