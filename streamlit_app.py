@@ -195,7 +195,7 @@ with st.form("add_journey_form"):
 
 # --- 4. FLERA RESOR (Återställt) ---
 with st.expander("📅 Lägg till flera resor (Kalender)"):
-    datum_lista = st.multiselect("Välj datum", options=[d.date() for d in pd.date_range(date(2024, 1, 1), date.today())])
+    datum_lista = st.multiselect("Välj datum", options=[d.date() for d in pd.date_range(date(2024, 1, 1), date(2060, 12, 31))])
     st_m = st.time_input("Starttid", key="m_start")
     sl_m = st.time_input("Sluttid", key="m_slut")
     sp_m = st.text_input("Startplats", key="m_startp")
